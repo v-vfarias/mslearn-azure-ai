@@ -181,7 +181,7 @@ function Create-EventSubscriptions {
         Write-Host "$([char]0x2713) Subscription already exists: $subApproved"
     }
 
-    # Subscription for all events (no filter — audit log)
+    # Subscription for all events (no filter - audit log)
     az eventgrid namespace topic event-subscription show --resource-group $rg --namespace-name $namespaceName --topic-name $topicName --name $subAll 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
         az eventgrid namespace topic event-subscription create `
@@ -193,7 +193,7 @@ function Create-EventSubscriptions {
             --event-delivery-schema CloudEventSchemaV1_0 2>$null | Out-Null
 
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "$([char]0x2713) Subscription created: $subAll (all events — audit log)"
+            Write-Host "$([char]0x2713) Subscription created: $subAll (all events - audit log)"
         }
         else {
             Write-Host "Error: Failed to create subscription '$subAll'"

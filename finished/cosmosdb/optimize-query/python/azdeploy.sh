@@ -12,6 +12,9 @@ location="canadacentral"          # Azure region for the resources
 # DON'T CHANGE ANYTHING BELOW THIS LINE.
 # ============================================================================
 
+# Disable Git Bash forward-slash path conversion (Windows only; no-op elsewhere).
+export MSYS_NO_PATHCONV=1
+
 # Generate consistent hash from Azure user object ID (based on az login account)
 user_object_id=$(az ad signed-in-user show --query "id" -o tsv 2>/dev/null)
 if [ -z "$user_object_id" ]; then
@@ -82,7 +85,116 @@ create_cosmosdb_account() {
     fi
 
     echo ""
-    echo "Use option 2 to configure Entra ID access."
+    echo "Use option 2 to create the containers."
+}
+
+# Function to create containers with different vector indexing strategies
+create_containers() {
+    echo "Creating containers with vector indexing policies..."
+
+    # Prereq check: Cosmos DB account must exist and be ready
+    local status=$(az cosmosdb show --resource-group $rg --name $account_name --query "provisioningState" -o tsv 2>/dev/null)
+    if [ -z "$status" ]; then
+        echo "Error: Cosmos DB account '$account_name' not found."
+        echo "Please run option 1 to create the Cosmos DB account, then try again."
+        return 1
+    fi
+
+    if [ "$status" != "Succeeded" ]; then
+        echo "Error: Cosmos DB account is not ready (current state: $status)."
+        echo "Please wait for deployment to complete. Use option 4 to check status."
+        return 1
+    fi
+
+    local vector_policy='{"vectorEmbeddings":[{"path":"/embedding","dataType":"float32","distanceFunction":"cosine","dimensions":256}]}'
+    local created=0
+
+    # Create vectors-flat container (exact nearest neighbor search)
+    local exists=$(az cosmosdb sql container show --resource-group $rg --account-name $account_name --database-name $database_name --name "vectors-flat" 2>/dev/null)
+    if [ -n "$exists" ]; then
+        echo "✓ Container already exists: vectors-flat"
+    else
+        echo "Creating container 'vectors-flat' with flat vector index..."
+        az cosmosdb sql container create \
+            --resource-group $rg \
+            --account-name $account_name \
+            --database-name $database_name \
+            --name "vectors-flat" \
+            --partition-key-path "/documentId" \
+            --idx '{"indexingMode":"consistent","automatic":true,"includedPaths":[{"path":"/*"}],"excludedPaths":[{"path":"/embedding/*"}],"vectorIndexes":[{"path":"/embedding","type":"flat"}]}' \
+            --vector-embeddings "$vector_policy" > /dev/null 2>&1
+
+        if [ $? -eq 0 ]; then
+            echo "✓ Container created: vectors-flat (exact nearest neighbor)"
+            created=$((created + 1))
+        else
+            echo "Error: Failed to create container vectors-flat"
+            return 1
+        fi
+    fi
+
+    # Create vectors-quantized container (compressed exact search)
+    exists=$(az cosmosdb sql container show --resource-group $rg --account-name $account_name --database-name $database_name --name "vectors-quantized" 2>/dev/null)
+    if [ -n "$exists" ]; then
+        echo "✓ Container already exists: vectors-quantized"
+    else
+        echo "Creating container 'vectors-quantized' with quantizedFlat vector index..."
+        az cosmosdb sql container create \
+            --resource-group $rg \
+            --account-name $account_name \
+            --database-name $database_name \
+            --name "vectors-quantized" \
+            --partition-key-path "/documentId" \
+            --idx '{"indexingMode":"consistent","automatic":true,"includedPaths":[{"path":"/*"}],"excludedPaths":[{"path":"/embedding/*"}],"vectorIndexes":[{"path":"/embedding","type":"quantizedFlat"}]}' \
+            --vector-embeddings "$vector_policy" > /dev/null 2>&1
+
+        if [ $? -eq 0 ]; then
+            echo "✓ Container created: vectors-quantized (compressed exact search)"
+            created=$((created + 1))
+        else
+            echo "Error: Failed to create container vectors-quantized"
+            return 1
+        fi
+    fi
+
+    # Create vectors-diskann container (approximate nearest neighbor)
+    exists=$(az cosmosdb sql container show --resource-group $rg --account-name $account_name --database-name $database_name --name "vectors-diskann" 2>/dev/null)
+    if [ -n "$exists" ]; then
+        echo "✓ Container already exists: vectors-diskann"
+    else
+        echo "Creating container 'vectors-diskann' with diskANN vector index..."
+        az cosmosdb sql container create \
+            --resource-group $rg \
+            --account-name $account_name \
+            --database-name $database_name \
+            --name "vectors-diskann" \
+            --partition-key-path "/documentId" \
+            --idx '{"indexingMode":"consistent","automatic":true,"includedPaths":[{"path":"/*"}],"excludedPaths":[{"path":"/embedding/*"}],"vectorIndexes":[{"path":"/embedding","type":"diskANN"}]}' \
+            --vector-embeddings "$vector_policy" > /dev/null 2>&1
+
+        if [ $? -eq 0 ]; then
+            echo "✓ Container created: vectors-diskann (approximate nearest neighbor)"
+            created=$((created + 1))
+        else
+            echo "Error: Failed to create container vectors-diskann"
+            return 1
+        fi
+    fi
+
+    if [ $created -gt 0 ]; then
+        echo ""
+        echo "All containers share:"
+        echo "  - Partition key: /documentId"
+        echo "  - Vector embedding: /embedding (float32, cosine, 256 dimensions)"
+        echo ""
+        echo "Index types:"
+        echo "  - vectors-flat: flat (exact search)"
+        echo "  - vectors-quantized: quantizedFlat (compressed exact search)"
+        echo "  - vectors-diskann: diskANN (approximate nearest neighbor)"
+    fi
+
+    echo ""
+    echo "Use option 3 to configure Entra ID access."
 }
 
 # Function to configure Entra ID RBAC for the signed-in user
@@ -197,7 +309,7 @@ retrieve_connection_info() {
 
     if [ -z "$cosmos_role" ]; then
         echo "Error: Entra ID access not configured for this account."
-        echo "Please run option 2 to configure Entra ID access, then try again."
+        echo "Please run option 3 to configure Entra ID access, then try again."
         return 1
     fi
 
@@ -212,7 +324,6 @@ retrieve_connection_info() {
     local env_file="$(dirname "$0")/.env"
 
     # Create or update .env file with export statements (no key needed for Entra auth)
-    # Note: Containers are created by setup_containers.py with different index types
     cat > "$env_file" << EOF
 export COSMOS_ENDPOINT="$endpoint"
 export COSMOS_DATABASE="$database_name"
@@ -225,7 +336,7 @@ EOF
     echo "Database: $database_name"
     echo "Authentication: Microsoft Entra ID (DefaultAzureCredential)"
     echo ""
-    echo "Note: Containers will be created by setup_containers.py"
+    echo "Containers: vectors-flat, vectors-quantized, vectors-diskann"
     echo ""
     echo "Environment variables saved to: $env_file"
 }
@@ -261,6 +372,16 @@ check_deployment_status() {
             else
                 echo "  ⚠ Database not created"
             fi
+
+            # Check containers
+            for cname in "vectors-flat" "vectors-quantized" "vectors-diskann"; do
+                local c_status=$(az cosmosdb sql container show --resource-group $rg --account-name $account_name --database-name $database_name --name $cname 2>/dev/null)
+                if [ -n "$c_status" ]; then
+                    echo "  ✓ Container: $cname"
+                else
+                    echo "  ⚠ Container not created: $cname"
+                fi
+            done
 
             # Check Entra ID RBAC
             local user_upn=$(az ad signed-in-user show --query userPrincipalName -o tsv 2>/dev/null)
@@ -304,17 +425,18 @@ show_menu() {
     echo "Location: $location"
     echo "====================================================================="
     echo "1. Create Cosmos DB account (with vector search capability)"
-    echo "2. Configure Entra ID access"
-    echo "3. Check deployment status"
-    echo "4. Retrieve connection info"
-    echo "5. Exit"
+    echo "2. Create containers (with vector indexing policies)"
+    echo "3. Configure Entra ID access"
+    echo "4. Check deployment status"
+    echo "5. Retrieve connection info"
+    echo "6. Exit"
     echo "====================================================================="
 }
 
 # Main menu loop
 while true; do
     show_menu
-    read -p "Please select an option (1-5): " choice
+    read -p "Please select an option (1-6): " choice
 
     case $choice in
         1)
@@ -327,30 +449,36 @@ while true; do
             ;;
         2)
             echo ""
-            configure_entra_access
+            create_containers
             echo ""
             read -p "Press Enter to continue..."
             ;;
         3)
             echo ""
-            check_deployment_status
+            configure_entra_access
             echo ""
             read -p "Press Enter to continue..."
             ;;
         4)
             echo ""
-            retrieve_connection_info
+            check_deployment_status
             echo ""
             read -p "Press Enter to continue..."
             ;;
         5)
+            echo ""
+            retrieve_connection_info
+            echo ""
+            read -p "Press Enter to continue..."
+            ;;
+        6)
             echo "Exiting..."
             clear
             exit 0
             ;;
         *)
             echo ""
-            echo "Invalid option. Please select 1-5."
+            echo "Invalid option. Please select 1-6."
             echo ""
             read -p "Press Enter to continue..."
             ;;

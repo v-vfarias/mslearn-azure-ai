@@ -9,6 +9,9 @@ location="<your-azure-region>"   # Azure region for the resources
 # DON'T CHANGE ANYTHING BELOW THIS LINE.
 # ============================================================================
 
+# Disable Git Bash forward-slash path conversion (Windows only; no-op elsewhere).
+export MSYS_NO_PATHCONV=1
+
 # Generate consistent hash from Azure user object ID (based on az login account)
 user_object_id=$(az ad signed-in-user show --query "id" -o tsv 2>/dev/null)
 if [ -z "$user_object_id" ]; then
@@ -149,7 +152,7 @@ create_event_subscriptions() {
         echo "✓ Subscription already exists: $sub_approved"
     fi
 
-    # Subscription for all events (no filter — audit log)
+    # Subscription for all events (no filter - audit log)
     sub_exists=$(az eventgrid namespace topic event-subscription show --resource-group $rg --namespace-name $namespace_name --topic-name $topic_name --name $sub_all 2>/dev/null)
     if [ -z "$sub_exists" ]; then
         az eventgrid namespace topic event-subscription create \
@@ -161,7 +164,7 @@ create_event_subscriptions() {
             --event-delivery-schema CloudEventSchemaV1_0 > /dev/null 2>&1
 
         if [ $? -eq 0 ]; then
-            echo "✓ Subscription created: $sub_all (all events — audit log)"
+            echo "✓ Subscription created: $sub_all (all events - audit log)"
         else
             echo "Error: Failed to create subscription '$sub_all'"
             return 1

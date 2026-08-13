@@ -53,7 +53,6 @@ function Create-RedisResource {
         --location $location `
         --sku "Balanced_B0" `
         --public-network-access "Enabled" `
-        --access-keys-auth "Enabled" `
         --no-database `
         --no-wait
 

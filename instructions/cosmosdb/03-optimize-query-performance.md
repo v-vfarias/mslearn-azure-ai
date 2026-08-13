@@ -85,6 +85,12 @@ In this section you run the deployment script to deploy the Cosmos DB account wi
     ./azdeploy.ps1
     ```
 
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
 1. When the script menu appears, enter **1** to launch the **Create Cosmos DB account** option. This creates the Cosmos DB for NoSQL account with the **EnableNoSQLVectorSearch** capability and a database. **Note:** Deployment can take 5-10 minutes to complete.
 
     >**IMPORTANT:** Leave the terminal running the deployment open for the duration of the exercise. You can move on to the next section of the exercise while the deployment continues in the terminal.
@@ -312,15 +318,17 @@ Next, you finalize the Azure resource deployment.
 
 ## Complete the Azure resource deployment
 
-In this section you return to the deployment script to configure Entra ID access and retrieve the connection information.
+In this section you return to the deployment script to create the containers, configure Entra ID access, and retrieve the connection information.
 
-1. When the **Create Cosmos DB account** operation has completed, enter **2** to launch the **Configure Entra ID access** option. This assigns your user account the necessary role to access the Cosmos DB data plane.
+1. When the **Create Cosmos DB account** operation has completed, enter **2** to launch the **Create containers** option. This creates three containers with different vector indexing strategies: flat, quantizedFlat, and diskANN.
 
-1. Enter **3** to launch the **Check deployment status** option. Verify the Cosmos DB account shows as ready with the vector search capability enabled.
+1. Enter **3** to launch the **Configure Entra ID access** option. This assigns your user account the necessary role to access the Cosmos DB data plane.
 
-1. Enter **4** to launch the **Retrieve connection info** option. This creates a file with the necessary environment variables.
+1. Enter **4** to launch the **Check deployment status** option. Verify the Cosmos DB account shows as ready with the vector search capability enabled.
 
-1. Enter **5** to exit the deployment script.
+1. Enter **5** to launch the **Retrieve connection info** option. This creates a file with the necessary environment variables.
+
+1. Enter **6** to exit the deployment script.
 
 1. Run the following command to load the environment variables into your terminal session from the file created in a previous step.
 
@@ -336,7 +344,7 @@ In this section you return to the deployment script to configure Entra ID access
 
     >**Note:** Keep the terminal open. If you close it and create a new terminal, you might need to run the command to create the environment variable again.
 
-Next, you set up the Python environment and create the vector containers.
+Next, you set up the Python environment and run the application.
 
 ## Set up the Python environment
 
@@ -371,23 +379,6 @@ In this section you create a Python virtual environment and install the dependen
     ```bash
     pip install -r requirements.txt
     ```
-
-Next, you create the containers with different vector indexing strategies.
-
-## Create containers with different index strategies
-
-In this section you run the setup script to create three Cosmos DB containers, each with a different vector indexing configuration. This enables side-by-side performance comparison.
-
-1. Run the following command to execute the setup script and create the containers. Ensure you are still in the *client* directory with the virtual environment activated.
-
-    ```bash
-    python setup_containers.py
-    ```
-
-1. Verify the output shows all three containers were created successfully:
-    - **vectors-flat** with flat index
-    - **vectors-quantized** with quantizedFlat index
-    - **vectors-diskann** with diskANN index
 
 Next, you test the vector index performance using the Flask application.
 
@@ -491,7 +482,7 @@ If you encounter issues during this exercise, try these steps:
 - Ensure you are in the *client* directory when running **python app.py**
 
 **Authentication or access denied errors**
-- Ensure Entra ID access was configured by running the deployment script option **2**
+- Ensure Entra ID access was configured by running the deployment script option **3**
 - Verify your user has both the **Contributor** role and the **Cosmos DB Built-in Data Contributor** role
 - Ensure **COSMOS_ENDPOINT** is set correctly in your terminal session
 
@@ -501,17 +492,17 @@ If you encounter issues during this exercise, try these steps:
 - If containers already exist, the script will use the existing containers
 
 **Vector search returns errors**
-- Verify the containers were created by running **python setup_containers.py**
+- Verify the containers were created by running the deployment script option **2**
 - Ensure sample data was loaded before running searches
 - Check that the containers have the vector embedding policy configured
 
 **Cosmos DB operations fail**
-- Verify the Cosmos DB account is ready by running the deployment script option **3**
+- Verify the Cosmos DB account is ready by running the deployment script option **4**
 - Ensure the database was created during deployment
 - Check that the account has the **EnableNoSQLVectorSearch** capability
 
 **Environment variable issues**
-- Ensure the *.env* file was created by running the deployment script option **4**
+- Ensure the *.env* file was created by running the deployment script option **5**
 - Run **source .env** (Bash) or **. .\.env.ps1** (PowerShell) after creating a new terminal
 - Verify variables are set by running **echo $COSMOS_ENDPOINT** (Bash) or **$env:COSMOS_ENDPOINT** (PowerShell)
 

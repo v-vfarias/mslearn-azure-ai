@@ -37,7 +37,7 @@ To complete the exercise, you need:
 
 ## Download project starter files and deploy Azure services
 
-In this section you download the starter files for the console app and use a script to deploy the necessary services to your Azure subscription. The Azure Managed Redis deployment takes 5-10 minutes to complete.
+In this section you download the starter files for the console app and use a script to deploy the necessary services to your Azure subscription. The Azure resource deployments can take 10-15 minutes to complete.
 
 1. Open a browser and enter the following URL to download the starter file. The file will be saved in your default download location.
 
@@ -64,11 +64,14 @@ In this section you download the starter files for the console app and use a scr
     az login
     ```
 
-1. Run the following commands to ensure your subscription has the necessary resource provider to install AKS and ACR.
+1. Run the following commands to ensure your subscription has the necessary resource providers to install AKS and ACR. The **Microsoft.Compute**, **Microsoft.Network**, and **Microsoft.Storage** providers are dependencies of AKS that Azure usually registers automatically, but explicitly registering them avoids occasional cluster creation failures on new subscriptions.
 
     ```
     az provider register --namespace Microsoft.ContainerService
     az provider register --namespace Microsoft.ContainerRegistry
+    az provider register --namespace Microsoft.Compute
+    az provider register --namespace Microsoft.Network
+    az provider register --namespace Microsoft.Storage
     ```
 
 1. Make sure you are in the root directory of the project and run the appropriate command in the terminal to launch the deployment script.
@@ -83,11 +86,17 @@ In this section you download the starter files for the console app and use a scr
     ./azdeploy.ps1
     ```
 
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
 ### Deploy resources to Azure
 
 With the deployment script running, follow these steps to create the needed resources in Azure.
 
-1. After the model is deployed, enter **1** to launch **Create Azure Container Registry (ACR)**. This creates the resource where the API container will be stored, and later pulled into the AKS resource.
+1. Enter **1** to launch **Create Azure Container Registry (ACR)**. This creates the resource where the API container will be stored, and later pulled into the AKS resource.
 
 1. After the ACR resource has been created, enter **2** to launch **Build and push API image to ACR**. This option uses ACR tasks to build the image and add it to the ACR repository. This operation can take 3-5 minutes to complete.
 
@@ -97,9 +106,11 @@ With the deployment script running, follow these steps to create the needed reso
 
 1. After the credentials have been set, enter **5** to launch the **Deploy applications to AKS** option. This deploys an API to the AKS cluster.
 
-1. After the app has been deployed, enter **6** to launch the **Check deployment stats** option. This option reports if each of the resources have been successfully deployed.
+1. After the app has been deployed, enter **6** to launch the **Check deployment status** option. This option reports if each of the resources have been successfully deployed.
 
-    If all of the services return a **successful** message, enter **7** to exit the deployment script.
+    If all of the services return a **successful** message, enter **8** to exit the deployment script.
+
+    If the AKS cluster is in a **Failed** or **Canceled** state, correct the reported issue, then enter **7** to launch the **Delete failed AKS deployment** option before running option **3** again. This guarded option does not delete a healthy or in-progress cluster.
 
 >**Note:** Leave the terminal open, all of the steps in the exercise are performed in the terminal.
 
@@ -183,18 +194,12 @@ A Service routes traffic to pods based on label selectors. When labels don't mat
     kubectl edit service api-service -n aks-troubleshoot
     ```
 
-    **Note:** The editor uses vi commands. The editor opens in **normal mode** where you navigate and run commands. Press **i** to enter **insert mode** where you can type and edit text. Press **Esc** to return to normal mode, then type commands like **:wq** to save and exit. Following is a quick reference:
+    **Note:** The **kubectl edit** command fetches the live resource configuration from the cluster and opens it in a local text editor. When you save and close the editor, kubectl automatically sends the changes back to the Kubernetes API server, which validates and applies them to the running cluster. The editor depends on your environment:
 
-    | Action | Command |
-    |--------|---------|
-    | Navigate | Arrow keys (**↑ ↓ ← →**) |
-    | Enter insert mode | **i** |
-    | Return to normal mode | **Esc** |
-    | Delete character (normal mode) | **x** |
-    | Save and exit (normal mode) | **:wq** + **Enter** |
-    | Exit without saving (normal mode) | **:q!** + **Enter** |
+    - **Bash:** Opens **vi** by default. Press **i** to enter insert mode, make your changes, press **Esc**, then type **:wq** and press **Enter** to save and exit. Type **:q!** to exit without saving.
+    - **PowerShell (Windows):** Opens **Notepad** by default. Make your changes, select **File > Save** (or **Ctrl+S**), then close the window. Closing without saving cancels the edit.
 
-1. In the editor, find the **selector** section. Press **i** to enter insert mode, then change **app: api-v2** to **app: api**. Press **Esc** to return to normal mode, then type **:wq** and press **Enter** to save and exit.
+1. In the editor, find the **selector** section and change **app: api-v2** to **app: api**. Save the changes and close the editor.
 
 1. Run the following command to verify the endpoint slice addresses are restored. The command should return an endpoint slice with an IP address listed.
 
@@ -242,7 +247,7 @@ When a container fails to start, Kubernetes repeatedly restarts it, resulting in
         ports:
     ```
 
-    Save the changes and exit the editor by selecting **Esc**, typing **:wq**, and then selecting **Enter**.
+    Save the changes and close the editor.
 
 1. Run the following command to watch the pod status. After a few moments, the pod enters **Running**. Enter **ctrl-c** to exit the command.
 
@@ -280,7 +285,7 @@ When a readiness probe fails, the pod shows **Running** but **0/1** containers a
     kubectl edit deployment api-deployment -n aks-troubleshoot
     ```
 
-    In the editor, find the **readinessProbe** section and change **path: /invalid-path** to **path: /healthz**. Save the changes and exit the editor by selecting **Esc**, typing **:wq**, and then selecting **Enter**.
+    In the editor, find the **readinessProbe** section and change **path: /invalid-path** to **path: /healthz**. Save the changes and close the editor.
 
 1. Run the following command to verify the new pod becomes ready and the old pod terminates. You should see only one pod with **Running** status and **1/1** in the READY column.
 
@@ -344,6 +349,13 @@ If you encounter issues while setting up this exercise, try the following troubl
 - Run the deployment script and select option **6. Check deployment status** to verify the state of all deployed resources.
 - This command checks ACR provisioning state, AKS cluster provisioning state, and Kubernetes resource availability.
 - Use this output to identify which component may be causing issues.
+
+**Resolve AKS cluster creation failures**
+- Quota validation can fail before an AKS resource is created, while failures later in provisioning can leave the cluster in a **Failed** or **Canceled** state.
+- If the error reports that **Standard_D2s_v5** is unavailable or that the region has insufficient capacity, exit with option **8**, change the **location** value near the top of the deployment script, and run option **3. Create AKS cluster** again.
+- If the error reports insufficient quota, select a region where your subscription has available Dsv5-family quota or request a quota increase. Changing regions only helps when the other region has sufficient quota.
+- The AKS cluster uses the **location** configured in the script even when the resource group already exists in another region.
+- If option **6** reports **Failed** or **Canceled**, correct the underlying issue and run option **7. Delete failed AKS deployment** before retrying option **3**. If no AKS resource was created, no deletion is needed.
 
 **ACR image pull errors**
 - If pods show **ImagePullBackOff** or **ErrImagePull** status, verify the ACR resource was created and the image was pushed successfully.

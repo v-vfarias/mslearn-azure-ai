@@ -78,6 +78,7 @@ In this section you download the project starter files and use a script to deplo
     ```azurecli
     az provider register --namespace Microsoft.App
     az provider register --namespace Microsoft.OperationalInsights
+    az provider register --namespace Microsoft.ContainerRegistry
     ```
 
 ### Create resources in Azure
@@ -94,6 +95,12 @@ In this section you run the deployment script to deploy the necessary services t
     **PowerShell**
     ```powershell
     ./azdeploy.ps1
+    ```
+
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
     ```
 
 1. When the script is running, enter **1** to launch **Create Azure Container Registry and build container image**.

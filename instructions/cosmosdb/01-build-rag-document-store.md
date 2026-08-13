@@ -85,15 +85,21 @@ In this section you run the deployment script to deploy the Cosmos DB account.
     ./azdeploy.ps1
     ```
 
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
 1. When the script menu appears, enter **1** to launch the **Create Cosmos DB account** option. This creates the Cosmos DB for NoSQL account with a database and container. **Note:** Deployment can take 5-10 minutes to complete.
 
     >**IMPORTANT:** Leave the terminal running the deployment open for the duration of the exercise. You can move on to the next section of the exercise while the deployment continues in the terminal.
 
 ## Complete the RAG document functions
 
-In this section you complete the *rag_functions.py* file by adding functions that an AI application can call to store and retrieve document chunks. These functions serve as the application's interface to the document store. The *test_workflow.py* script, which you run later in this exercise, imports these functions to demonstrate how an AI application would use them.
+In this section you complete the *rag_functions.py* file by adding functions that an AI application can call to store and retrieve document chunks. These functions serve as the application's interface to the document store. The app you run later in this exercise imports these functions to demonstrate how an AI application would use them.
 
-1. Open the *rag-backend/rag_functions.py* file in VS Code.
+1. Open the *client/rag_functions.py* file in VS Code.
 
 1. Search for the **BEGIN STORE DOCUMENT CHUNK FUNCTION** comment and add the following code directly after the comment. This function stores a document chunk with its metadata, using upsert to handle both inserts and updates.
 
@@ -440,12 +446,11 @@ In this section you practice writing SQL queries against the Cosmos DB container
 
 1. Select **Execute Query** and review the results.
 
-1. Enter the following query in the **SQL Query** field to count chunks by document. This helps understand the distribution of content across source documents.
+1. Enter the following query in the **SQL Query** field to view the documents stored in the container along with their category and source metadata. This helps understand what content is available for RAG retrieval.
 
     ```sql
-    SELECT c.documentId, COUNT(1) as chunkCount
+    SELECT DISTINCT c.documentId, c.metadata.category, c.metadata.source
     FROM c
-    GROUP BY c.documentId
     ```
 
 1. Select **Execute Query** and review the results.

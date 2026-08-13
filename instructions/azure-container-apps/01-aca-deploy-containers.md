@@ -76,6 +76,7 @@ In this section you download the project starter files and use a script to deplo
     ```azurecli
     az provider register --namespace Microsoft.App
     az provider register --namespace Microsoft.OperationalInsights
+    az provider register --namespace Microsoft.ContainerRegistry
     ```
 
 ### Create resources in Azure
@@ -92,6 +93,12 @@ In this section you run the deployment script to deploy the necessary services t
     **PowerShell**
     ```powershell
     ./azdeploy.ps1
+    ```
+
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
     ```
 
 1. When the script is running, enter **1** to launch the **Create Azure Container Registry and build container image** option. This option creates the ACR service and uses ACR Tasks to build and push the image to the registry.
@@ -180,8 +187,14 @@ In this section you deploy the API as a container app with external ingress. Bec
 
 1. Run the following command to list the revisions to confirm a new revision was created.
 
+    **Bash**
     ```azurecli
     az containerapp revision list -n $CONTAINER_APP_NAME -g $RESOURCE_GROUP -o table
+    ```
+
+    **PowerShell**
+    ```powershell
+    az containerapp revision list -n $env:CONTAINER_APP_NAME -g $env:RESOURCE_GROUP -o table
     ```
 
     The revision name ends with a suffix like `--0000002`, indicating this is the second revision. Container Apps creates a new revision whenever you change environment variables or secrets, which restarts the app with the updated configuration. Old inactive revisions may be pruned over time.
@@ -251,8 +264,14 @@ You should validate that the app starts and that ingress works. You also use log
 
 1. Run the following command to review logs for startup and runtime signals. This command shows recent console output only. For historical logs and advanced troubleshooting, logs persist in the Log Analytics workspace associated with your Container Apps environment.
 
+    **Bash**
     ```azurecli
     az containerapp logs show -n $CONTAINER_APP_NAME -g $RESOURCE_GROUP
+    ```
+
+    **Powershell**
+    ```powershell
+    az containerapp logs show -n $env:CONTAINER_APP_NAME -g $env:RESOURCE_GROUP
     ```
 
     Look for **gunicorn** startup messages showing workers spawned and listening on port 8000. You should also see HTTP request logs from your curl commands (GET /health, POST /process, etc.).

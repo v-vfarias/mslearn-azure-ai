@@ -87,6 +87,12 @@ In this section you run the deployment script to deploy the PostgreSQL server an
     ./azdeploy.ps1
     ```
 
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
 1. When the script menu appears, enter **1** to launch the **Create PostgreSQL server with Entra authentication** option. This creates the server with Entra-only authentication enabled. **Note:** Deployment can take 5-10 minutes to complete.
 
     >**IMPORTANT:** Leave the terminal running the deployment open for the duration of the exercise. You can move on to the next section of the exercise while the deployment continues in the terminal.
@@ -137,7 +143,7 @@ In this section you complete the *app.py* file by adding route handlers that int
         return redirect(url_for("index"))
     ```
 
-1. Search for the **BEGIN SEARCH SECTION** comment and add the following code directly after the comment. This route retrieves the embedding for a selected product and finds similar products using cosine distance.
+1. Search for the **BEGIN SEARCH SECTION** comment and add the following code directly after the comment. This route retrieves the selected product's details and embedding, finds similar products using cosine distance, and passes both the selected product and the results to the template for display.
 
     ```python
     @app.route("/search", methods=["POST"])
@@ -152,13 +158,22 @@ In this section you complete the *app.py* file by adding route handlers that int
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Get the embedding for the selected product
-                    cur.execute("SELECT embedding FROM products WHERE id = %s", (product_id,))
+                    # Get the selected product details and embedding
+                    cur.execute("""
+                        SELECT id, name, category, description, price, embedding
+                        FROM products WHERE id = %s
+                    """, (product_id,))
                     row = cur.fetchone()
 
                     if not row:
                         flash("Product not found", "error")
                         return redirect(url_for("index"))
+
+                    searched_product = {
+                        "id": row[0], "name": row[1], "category": row[2],
+                        "description": row[3], "price": row[4]
+                    }
+                    embedding = row[5]
 
                     # Find similar products using cosine distance
                     # The <=> operator is pgvector's cosine distance operator
@@ -169,7 +184,7 @@ In this section you complete the *app.py* file by adding route handlers that int
                         WHERE id != %s
                         ORDER BY distance
                         LIMIT 5
-                    """, (row[0], product_id))
+                    """, (embedding, product_id))
 
                     results = [
                         {"id": r[0], "name": r[1], "category": r[2], "description": r[3], "price": r[4], "distance": r[5]}
@@ -178,7 +193,7 @@ In this section you complete the *app.py* file by adding route handlers that int
 
             products = get_products()
             new_products = get_new_products()
-            return render_template("index.html", products=products, new_products=new_products, results=results)
+            return render_template("index.html", products=products, new_products=new_products, results=results, searched_product=searched_product)
 
         except Exception as e:
             flash(f"Error searching: {str(e)}", "error")
@@ -263,8 +278,14 @@ In this section you enable the pgvector extension and create the products table 
 
 1. Run the following command to connect to the PostgreSQL server using **psql**. The command uses the environment variables you loaded in the previous step.
 
+    **Bash**
     ```bash
     psql "host=$DB_HOST dbname=$DB_NAME user=$DB_USER sslmode=require"
+    ```
+
+    **PowerShell**
+    ```powershell
+    psql "host=$env:DB_HOST port=5432 dbname=$env:DB_NAME user=$env:DB_USER sslmode=require"
     ```
 
 1. Enable the pgvector extension. This extension must be enabled before you can use vector data types.

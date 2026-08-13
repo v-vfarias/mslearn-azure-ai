@@ -14,18 +14,18 @@ permissions:
 jobs:
   detect-and-zip:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0  # Get full history to detect changes
-    
+
     - name: Setup Node.js for JSON processing
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: '18'
-    
+
     - name: Read zip configuration
       id: read-config
       run: |
@@ -34,15 +34,15 @@ jobs:
           echo "folders=[]" >> $GITHUB_OUTPUT
           exit 0
         fi
-        
+
         # Read and validate JSON
         config=$(cat _zip-process/zip-config.json)
         echo "Configuration read: $config"
-        
+
         # Extract folders array and format for matrix
         folders=$(echo "$config" | jq -c '.folders')
         echo "folders=$folders" >> $GITHUB_OUTPUT
-    
+
     - name: Detect changed folders
       id: detect-changes
       run: |
@@ -57,19 +57,19 @@ jobs:
           echo "Changed files:"
           echo "$changed_files"
         fi
-        
+
         # Read config and check which source folders have changes
         config=$(cat _zip-process/zip-config.json 2>/dev/null || echo '{"folders":[]}')
         folders_to_process=()
-        
+
         echo "$config" | jq -r '.folders[] | @base64' | while IFS= read -r folder_data; do
           folder_info=$(echo "$folder_data" | base64 -d)
           source_path=$(echo "$folder_info" | jq -r '.source')
           output_path=$(echo "$folder_info" | jq -r '.output')
           zip_name=$(echo "$folder_info" | jq -r '.name')
-          
+
           echo "Checking folder: $source_path"
-          
+
           # Check if this source folder has changes or if it's a manual run
           if [ "$changed_files" = "all" ] || echo "$changed_files" | grep -q "^$source_path/"; then
             echo "Changes detected in $source_path - will create zip"
@@ -78,7 +78,7 @@ jobs:
             echo "No changes in $source_path - skipping"
           fi
         done
-        
+
         # Check if we have any folders to process
         if [ -f folders_to_process.txt ]; then
           echo "has_changes=true" >> $GITHUB_OUTPUT
@@ -88,7 +88,7 @@ jobs:
           echo "has_changes=false" >> $GITHUB_OUTPUT
           echo "No folders need processing"
         fi
-    
+
     - name: Create output directories
       if: steps.detect-changes.outputs.has_changes == 'true'
       run: |
@@ -100,7 +100,7 @@ jobs:
             echo "Created directory: $output_path"
           done < folders_to_process.txt
         fi
-    
+
     - name: Create zip files
       if: steps.detect-changes.outputs.has_changes == 'true'
       run: |
@@ -108,25 +108,27 @@ jobs:
           # Get absolute path to repository root
           repo_root=$(pwd)
           echo "Repository root: $repo_root"
-          
+
           while IFS= read -r folder_info; do
             source_path=$(echo "$folder_info" | jq -r '.source')
             output_path=$(echo "$folder_info" | jq -r '.output')
             zip_name=$(echo "$folder_info" | jq -r '.name')
-            
+
             # Convert to absolute paths
             abs_source_path="$repo_root/$source_path"
             abs_output_path="$repo_root/$output_path"
             abs_zip_file="$abs_output_path/$zip_name"
-            
+
             echo "Processing: $abs_source_path -> $abs_zip_file"
-            
+
             if [ -d "$abs_source_path" ]; then
+              # Remove any existing zip so deleted/moved files aren't carried over
+              rm -f "$abs_zip_file"
               # Create zip file using absolute paths
               cd "$abs_source_path"
               zip -r "$abs_zip_file" .
               cd "$repo_root"
-              
+
               echo "✅ Created: $abs_zip_file"
               ls -la "$abs_zip_file"
             else
@@ -134,16 +136,16 @@ jobs:
             fi
           done < folders_to_process.txt
         fi
-    
+
     - name: Commit and push zip files
       if: steps.detect-changes.outputs.has_changes == 'true'
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        
+
         # Add all zip files
         git add "**/*.zip"
-        
+
         # Check if there are changes to commit
         if git diff --staged --quiet; then
           echo "No new zip files to commit"

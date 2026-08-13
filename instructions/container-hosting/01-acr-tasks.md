@@ -82,6 +82,12 @@ In this section you download the project starter files and use a script to deplo
     ./azdeploy.ps1
     ```
 
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
 1. Run the appropriate command to load the environment variables into your terminal session.
 
     **Bash**
@@ -195,7 +201,7 @@ In this section you use the **az acr run** command to execute a command inside y
     ```bash
     az acr run \
         --registry $ACR_NAME \
-        --cmd "$ACR_NAME.azurecr.io/inference-api:v1.0.0 python -c 'from app import app; print(\"Application loaded successfully\")'" \
+        --cmd "$ACR_NAME.azurecr.io/inference-api:v1.0.0 python -c 'from app import app'" \
         /dev/null
     ```
 
@@ -203,17 +209,11 @@ In this section you use the **az acr run** command to execute a command inside y
     ```powershell
     az acr run `
         --registry $env:ACR_NAME `
-        --cmd "$env:ACR_NAME.azurecr.io/inference-api:v1.0.0 python -c 'from app import app; print(`"Application loaded successfully`")'" `
+        --cmd "$env:ACR_NAME.azurecr.io/inference-api:v1.0.0 python -c 'from app import app'" `
         /dev/null
     ```
 
-    >**Note:** If the previous command fails in PowerShell, run the simpler version below instead. It drops the **print** statement to avoid embedded quote issues. A successful run ends with **Run ID: xxx was successful**.
-    >
-    >```powershell
-    >az acr run --registry $env:ACR_NAME --cmd "$env:ACR_NAME.azurecr.io/inference-api:v1.0.0 python -c 'from app import app'" /dev/null
-    >```
-
-    The output includes Docker pull progress as it downloads the image. Look for **Application loaded successfully** near the end of the output. This confirms the container runs correctly and the Flask application imports without errors.
+    The output includes Docker pull progress as it downloads the image. A successful run ends with **Run ID: xxx was successful after xxx**. This confirms the container runs correctly and the Flask application imports without errors.
 
 ## Build with a different tag
 
@@ -303,16 +303,14 @@ In this section you review the ACR task run history and lock an image to protect
     ```bash
     az acr repository show \
         --name $ACR_NAME \
-        --image inference-api:v1.0.0 \
-        --output table
+        --image inference-api:v1.0.0
     ```
 
     **PowerShell**
     ```powershell
     az acr repository show `
         --name $env:ACR_NAME `
-        --image inference-api:v1.0.0 `
-        --output table
+        --image inference-api:v1.0.0
     ```
 
     The **writeEnabled** field shows **False**, indicating the image is protected.

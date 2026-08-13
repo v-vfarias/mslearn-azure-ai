@@ -90,7 +90,88 @@ function Create-CosmosDBAccount {
     }
 
     Write-Host ""
-    Write-Host "Use option 2 to configure Entra ID access."
+    Write-Host "Use option 2 to create the containers."
+}
+
+# Function to create containers with different vector indexing strategies
+function Create-Containers {
+    Write-Host "Creating containers with vector indexing policies..."
+
+    # Prereq check: Cosmos DB account must exist and be ready
+    $status = (az cosmosdb show --resource-group $rg --name $accountName --query "provisioningState" -o tsv 2>$null)
+    if ([string]::IsNullOrWhiteSpace($status)) {
+        Write-Host "Error: Cosmos DB account '$accountName' not found."
+        Write-Host "Please run option 1 to create the Cosmos DB account, then try again."
+        return
+    }
+
+    if ($status -ne "Succeeded") {
+        Write-Host "Error: Cosmos DB account is not ready (current state: $status)."
+        Write-Host "Please wait for deployment to complete. Use option 4 to check status."
+        return
+    }
+
+    # Write JSON policies to temp files and pass via @file to avoid PowerShell quoting issues.
+    # See https://github.com/Azure/azure-cli/blob/dev/doc/quoting-issues-with-powershell.md
+    $vectorPolicyFile = Join-Path ([System.IO.Path]::GetTempPath()) "cosmos-vector-policy.json"
+    $indexingPolicyFile = Join-Path ([System.IO.Path]::GetTempPath()) "cosmos-indexing-policy.json"
+    '{"vectorEmbeddings":[{"path":"/embedding","dataType":"float32","distanceFunction":"cosine","dimensions":256}]}' | Set-Content -Path $vectorPolicyFile -Encoding utf8
+
+    $created = 0
+
+    # Define containers: name and index type
+    $containers = @(
+        @{ Name = "vectors-flat"; Type = "flat"; Description = "exact nearest neighbor" },
+        @{ Name = "vectors-quantized"; Type = "quantizedFlat"; Description = "compressed exact search" },
+        @{ Name = "vectors-diskann"; Type = "diskANN"; Description = "approximate nearest neighbor" }
+    )
+
+    foreach ($container in $containers) {
+        az cosmosdb sql container show --resource-group $rg --account-name $accountName --database-name $databaseName --name $container.Name 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "$([char]0x2713) Container already exists: $($container.Name)"
+        }
+        else {
+            Write-Host "Creating container '$($container.Name)' with $($container.Type) vector index..."
+            "{`"indexingMode`":`"consistent`",`"automatic`":true,`"includedPaths`":[{`"path`":`"/*`"}],`"excludedPaths`":[{`"path`":`"/embedding/*`"}],`"vectorIndexes`":[{`"path`":`"/embedding`",`"type`":`"$($container.Type)`"}]}" | Set-Content -Path $indexingPolicyFile -Encoding utf8
+
+            az cosmosdb sql container create `
+                --resource-group $rg `
+                --account-name $accountName `
+                --database-name $databaseName `
+                --name $container.Name `
+                --partition-key-path "/documentId" `
+                --idx "@$indexingPolicyFile" `
+                --vector-embeddings "@$vectorPolicyFile" 2>$null | Out-Null
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "$([char]0x2713) Container created: $($container.Name) ($($container.Description))"
+                $created++
+            }
+            else {
+                Write-Host "Error: Failed to create container $($container.Name)"
+                Remove-Item -Path $vectorPolicyFile, $indexingPolicyFile -ErrorAction SilentlyContinue
+                return
+            }
+        }
+    }
+
+    Remove-Item -Path $vectorPolicyFile, $indexingPolicyFile -ErrorAction SilentlyContinue
+
+    if ($created -gt 0) {
+        Write-Host ""
+        Write-Host "All containers share:"
+        Write-Host "  - Partition key: /documentId"
+        Write-Host "  - Vector embedding: /embedding (float32, cosine, 256 dimensions)"
+        Write-Host ""
+        Write-Host "Index types:"
+        Write-Host "  - vectors-flat: flat (exact search)"
+        Write-Host "  - vectors-quantized: quantizedFlat (compressed exact search)"
+        Write-Host "  - vectors-diskann: diskANN (approximate nearest neighbor)"
+    }
+
+    Write-Host ""
+    Write-Host "Use option 3 to configure Entra ID access."
 }
 
 # Function to configure Entra ID RBAC for the signed-in user
@@ -107,7 +188,7 @@ function Configure-EntraAccess {
 
     if ($status -ne "Succeeded") {
         Write-Host "Error: Cosmos DB account is not ready (current state: $status)."
-        Write-Host "Please wait for deployment to complete. Use option 3 to check status."
+        Write-Host "Please wait for deployment to complete. Use option 4 to check status."
         return
     }
 
@@ -222,6 +303,17 @@ function Check-DeploymentStatus {
                 Write-Host "  $([char]0x26A0) Database not created"
             }
 
+            # Check containers
+            foreach ($cname in @("vectors-flat", "vectors-quantized", "vectors-diskann")) {
+                az cosmosdb sql container show --resource-group $rg --account-name $accountName --database-name $databaseName --name $cname 2>$null | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "  $([char]0x2713) Container: $cname"
+                }
+                else {
+                    Write-Host "  $([char]0x26A0) Container not created: $cname"
+                }
+            }
+
             # Check Entra ID RBAC
             $userUpn = (az ad signed-in-user show --query userPrincipalName -o tsv 2>$null)
             $accountId = (az cosmosdb show --resource-group $rg --name $accountName --query "id" -o tsv)
@@ -278,7 +370,7 @@ function Retrieve-ConnectionInfo {
 
     if ([string]::IsNullOrWhiteSpace($cosmosRole)) {
         Write-Host "Error: Entra ID access not configured for this account."
-        Write-Host "Please run option 2 to configure Entra ID access, then try again."
+        Write-Host "Please run option 3 to configure Entra ID access, then try again."
         return
     }
 
@@ -294,7 +386,6 @@ function Retrieve-ConnectionInfo {
     $envFile = Join-Path $scriptDir ".env.ps1"
 
     # Create or update .env.ps1 file with environment variable assignments (no key needed for Entra auth)
-    # Note: Containers are created by setup_containers.py with different index types
     @(
         "`$env:COSMOS_ENDPOINT = `"$endpoint`"",
         "`$env:COSMOS_DATABASE = `"$databaseName`""
@@ -307,7 +398,7 @@ function Retrieve-ConnectionInfo {
     Write-Host "Database: $databaseName"
     Write-Host "Authentication: Microsoft Entra ID (DefaultAzureCredential)"
     Write-Host ""
-    Write-Host "Note: Containers will be created by setup_containers.py"
+    Write-Host "Containers: vectors-flat, vectors-quantized, vectors-diskann"
     Write-Host ""
     Write-Host "Environment variables saved to: $envFile"
 }
@@ -323,17 +414,18 @@ function Show-Menu {
     Write-Host "Location: $location"
     Write-Host "====================================================================="
     Write-Host "1. Create Cosmos DB account (with vector search capability)"
-    Write-Host "2. Configure Entra ID access"
-    Write-Host "3. Check deployment status"
-    Write-Host "4. Retrieve connection info"
-    Write-Host "5. Exit"
+    Write-Host "2. Create containers (with vector indexing policies)"
+    Write-Host "3. Configure Entra ID access"
+    Write-Host "4. Check deployment status"
+    Write-Host "5. Retrieve connection info"
+    Write-Host "6. Exit"
     Write-Host "====================================================================="
 }
 
 # Main menu loop
 while ($true) {
     Show-Menu
-    $choice = Read-Host "Please select an option (1-5)"
+    $choice = Read-Host "Please select an option (1-6)"
 
     switch ($choice) {
         "1" {
@@ -346,30 +438,36 @@ while ($true) {
         }
         "2" {
             Write-Host ""
-            Configure-EntraAccess
+            Create-Containers
             Write-Host ""
             Read-Host "Press Enter to continue..."
         }
         "3" {
             Write-Host ""
-            Check-DeploymentStatus
+            Configure-EntraAccess
             Write-Host ""
             Read-Host "Press Enter to continue..."
         }
         "4" {
             Write-Host ""
-            Retrieve-ConnectionInfo
+            Check-DeploymentStatus
             Write-Host ""
             Read-Host "Press Enter to continue..."
         }
         "5" {
+            Write-Host ""
+            Retrieve-ConnectionInfo
+            Write-Host ""
+            Read-Host "Press Enter to continue..."
+        }
+        "6" {
             Write-Host "Exiting..."
             Clear-Host
             exit 0
         }
         default {
             Write-Host ""
-            Write-Host "Invalid option. Please select 1-5."
+            Write-Host "Invalid option. Please select 1-6."
             Write-Host ""
             Read-Host "Press Enter to continue..."
         }

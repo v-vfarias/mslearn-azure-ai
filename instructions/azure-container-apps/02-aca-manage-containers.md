@@ -75,6 +75,7 @@ In this section you download the project starter files and use a script to deplo
     ```azurecli
     az provider register --namespace Microsoft.App
     az provider register --namespace Microsoft.OperationalInsights
+    az provider register --namespace Microsoft.ContainerRegistry
     ```
 
 ### Create resources in Azure
@@ -91,6 +92,12 @@ In this section you run the deployment script to deploy the necessary services t
     **PowerShell**
     ```powershell
     ./azdeploy.ps1
+    ```
+
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
     ```
 
 1. When the script is running, enter **1** to launch the **Create Azure Container Registry and build container image** option. This option creates the ACR service and uses ACR Tasks to build and push the image to the registry.
@@ -377,11 +384,15 @@ These queries help you investigate issues that occurred in the past, even after 
 
 ## Clean up resources
 
-Cleaning up avoids ongoing cost. Delete the resource group, which deletes the Container Apps environment, container app, and registry.
+Now that you finished the exercise, you should delete the cloud resources you created to avoid unnecessary resource usage.
 
-```bash
-az group delete --name $RESOURCE_GROUP --no-wait --yes
-```
+1. Run the following command in the VS Code terminal to delete the resource group, and all resources in the group. Replace **\<rg-name>** with the name you choose earlier in the exercise. The command will launch a background task in Azure to delete the resource group.
+
+    ```
+    az group delete --name <rg-name> --no-wait --yes
+    ```
+
+> **CAUTION:** Deleting a resource group deletes all resources contained within it. If you chose an existing resource group for this exercise, any existing resources outside the scope of this exercise will also be deleted.
 
 ## Troubleshooting
 

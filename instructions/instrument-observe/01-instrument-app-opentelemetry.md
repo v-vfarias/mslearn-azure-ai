@@ -61,10 +61,11 @@ In this section you download the starter files for the app and use a script to d
     az login
     ```
 
-1. Run the following command to ensure your subscription has the necessary resource provider for the exercise.
+1. Run the following commands to ensure your subscription has the necessary resource providers for the exercise.
 
     ```
     az provider register --namespace Microsoft.Insights
+    az provider register --namespace Microsoft.OperationalInsights
     ```
 
 1. Run the following command to add the Application Insights CLI extension. This extension provides the commands the deployment script uses to create and manage the Application Insights resource.
@@ -83,6 +84,12 @@ In this section you download the starter files for the app and use a script to d
     **PowerShell**
     ```powershell
     ./azdeploy.ps1
+    ```
+
+    > **Note:** If PowerShell blocks the script because it is not digitally signed, run the following command in the same terminal session, then run the deployment script again. This command changes the execution policy only for the current PowerShell process.
+
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
     ```
 
 1. When the script is running, enter **1** to launch the **1. Create Application Insights** option.
